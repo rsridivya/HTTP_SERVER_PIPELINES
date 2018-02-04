@@ -1,0 +1,88 @@
+pipeline{
+    agent {
+        node {
+        label "Build"
+        customWorkspace "C:/Build"
+        }
+    }
+    
+    stages{
+        stage("Checkout"){
+            steps{
+            echo "checkout"
+            //git branch: "$branch_name", url: 'https://github.com/rsridivya/simple_http_server.git'
+            }  
+        }
+        stage("Build"){
+            steps{
+                echo "mvn package"
+                //bat "mvn package"
+            }
+        }
+        stage("Code Coverage"){
+            steps{
+                echo "mvn package"
+                //bat "mvn clean clover:setup test clover:aggregate clover:clover install"
+            }
+        }
+        stage("Publish Reports"){
+            steps{
+                publishHTML(
+                    [allowMissing: false, 
+                    alwaysLinkToLastBuild: false, 
+                    keepAll: false, 
+                    reportDir: 'C:/Build/target/site/clover', 
+                    reportFiles: 'index.html', 
+                    reportName: 'Clover Code Coverage Reports', 
+                    reportTitles: ''])
+                    step([
+    $class: 'CloverPublisher',
+    cloverReportDir: 'C:/Build/target/site/clover',
+    cloverReportFileName: 'clover.xml',
+    healthyTarget: [methodCoverage: 70, conditionalCoverage: 80, statementCoverage: 80], // optional, default is: method=70, conditional=80, statement=80
+    unhealthyTarget: [methodCoverage: 50, conditionalCoverage: 50, statementCoverage: 50], // optional, default is none
+    failingTarget: [methodCoverage: 0, conditionalCoverage: 0, statementCoverage: 0]     // optional, default is none
+  ])
+            }
+        }
+        stage("Checkin"){
+            steps{
+                echo("Starting uploding artificats with version 2.0.1")
+                
+                nexusArtifactUploader artifacts: [[artifactId: 'simple_http_server_new', 
+                classifier: '', file: 'target/simple_http_server-0.0.1-SNAPSHOT.jar', type: 'jar']], 
+                credentialsId: '33e06f23-82e2-4e4e-9791-5c1bd1a2b1ed', 
+                groupId: 'pkg.org', 
+                nexusUrl: '54.86.244.189:8081', 
+                nexusVersion: 'nexus3', 
+                protocol: 'http', 
+                repository: 'maven-releases', version: "${version}"
+            }
+        }
+    }
+    post{
+            success{
+                    script{
+                env.RELEASE_SCOPE = input message: 'input required', ok: 'Release!',
+                            parameters: [choice(name: 'RELEASE_SCOPE', choices: 'dev\nprod\nstage', description: 'Which Jobs needs to run')]
+                            
+                def selected_option = env.RELEASE_SCOPE
+                echo("$selected_option")
+                if( selected_option=='dev' ){
+                    build job: 'Dev_Build_http_server', parameters: [string(name: 'version_number', value: "$version")]
+                }
+                else if(selected_option=='prod'){
+                    
+                }
+                else if(selected_option=='stage'){
+                    
+                }
+                else
+                {
+                    echo "No Promotion Selected By The User"
+                }
+                    }
+                }
+        
+        }
+}
